@@ -6,6 +6,16 @@ urllib.request.install_opener(
     urllib.request.build_opener(urllib.request.ProxyHandler({})))
 
 # Setup Hermes config at startup
+def md_to_html(text):
+    """Convert simple markdown to Telegram-compatible HTML."""
+    import re
+    text = re.sub(r'\*\*\*(.+?)\*\*\*', r'<b><i>\1</i></b>', text)
+    text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', text)
+    text = re.sub(r'\*(.+?)\*', r'<i>\1</i>', text)
+    text = re.sub(r'`(.+?)`', r'<code>\1</code>', text)
+    text = re.sub(r'```(.+?)```', r'<pre>\1</pre>', text, flags=re.DOTALL)
+    return text
+
 _HERMES_HOME = os.path.expanduser("~/.hermes")
 os.makedirs(_HERMES_HOME, exist_ok=True)
 with open(f"{_HERMES_HOME}/config.yaml", "w") as f:
@@ -53,8 +63,8 @@ def clean_hermes(text):
 
 def ask_hermes(text):
     """Call full Hermes CLI with skills and tools."""
-    # Tell Hermes to respond in HTML for Telegram formatting
-    enhanced = f"(Responde en español, usa HTML para formato: <b>negrita</b> <i>cursiva</i> <code>código</code>. Sé conciso.)\n\n{text}"
+    # Tell Hermes to use markdown, we'll convert to HTML
+    enhanced = f"(Responde en español, sé conciso.)\n\n{text}"
     try:
         proc = subprocess.run(
             [_HERMES, "chat", "-q", enhanced],
@@ -100,7 +110,7 @@ async def bot_loop():
                     tg_call("sendMessage", {"chat_id": chat_id, "text": "No autorizado.", "parse_mode": "HTML"})
                     continue
                 reply = await asyncio.to_thread(ask_hermes, text)
-                tg_call("sendMessage", {"chat_id": chat_id, "text": reply[:4000], "parse_mode": "HTML"})
+                tg_call("sendMessage", {"chat_id": chat_id, "text": md_to_html(reply)[:4000], "parse_mode": "HTML"})
         except urllib.error.HTTPError as e:
             if e.code == 409:
                 print("409 - esperando...", flush=True)
