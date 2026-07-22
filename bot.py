@@ -66,8 +66,13 @@ async def bot_loop():
                     continue
                 reply = await ask_deepseek(text)
                 tg_call("sendMessage", {"chat_id": chat_id, "text": reply[:4000]})
-        except asyncio.TimeoutError:
-            continue
+        except urllib.error.HTTPError as e:
+            if e.code == 409:
+                print("409 - otra instancia activa, esperando...", flush=True)
+                await asyncio.sleep(10)
+                continue
+            print(f"ERR {e.code}: {e.reason}", flush=True)
+            await asyncio.sleep(3)
         except Exception as e:
             print(f"ERR: {e}", flush=True)
             await asyncio.sleep(3)
