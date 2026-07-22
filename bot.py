@@ -53,9 +53,11 @@ def clean_hermes(text):
 
 def ask_hermes(text):
     """Call full Hermes CLI with skills and tools."""
+    # Tell Hermes to respond in plain text for Telegram
+    enhanced = f"(Responde en español, en 1-3 párrafos cortos, sin markdown ni formato, texto plano.)\n\n{text}"
     try:
         proc = subprocess.run(
-            [_HERMES, "chat", "-q", text],
+            [_HERMES, "chat", "-q", enhanced],
             capture_output=True, text=True, timeout=120,
             cwd=_HERMES_HOME,
             env={**os.environ, "TERM": "xterm-256color", "PAGER": "cat"}
