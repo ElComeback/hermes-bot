@@ -1,10 +1,10 @@
-"""Railway Telegram Bot — uses DeepSeek API."""
-import asyncio, os, logging, sys
-# Clear proxy env vars for Railway internal network
-for key in list(os.environ):
-    if key.upper() in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"):
-        del os.environ[key]
-import httpx
+"""Railway Telegram Bot — bypasses proxy for Telegram API calls."""
+import asyncio, os, logging, sys, json
+
+# Force no proxy for all urllib requests (Railway injects HTTP_PROXY)
+import urllib.request
+urllib.request.install_opener(
+    urllib.request.build_opener(urllib.request.ProxyHandler({})))
 from openai import AsyncOpenAI
 from fastapi import FastAPI
 import uvicorn
@@ -16,16 +16,19 @@ DEEPSEEK_KEY = os.environ["DEEPSEEK_API_KEY"]
 URL = f"https://api.telegram.org/bot{TOKEN}"
 PORT = int(os.environ.get("PORT", 8080))
 
-client = AsyncOpenAI(api_key=DEEPSEEK_KEY, base_url="https://api.deepseek.com", http_client=httpx.AsyncClient(trust_env=False))
+client = AsyncOpenAI(api_key=DEEPSEEK_KEY, base_url="https://api.deepseek.com",
+                     http_client=__import__("httpx").AsyncClient(trust_env=False))
 app = FastAPI()
 
 @app.get("/")
 async def root():
     return {"status": "ok"}
 
-async def send(chat_id, text):
-    async with httpx.AsyncClient(timeout=30, trust_env=False) as c:
-        await c.post(f"{URL}/sendMessage", json={"chat_id": chat_id, "text": text})
+def tg_call(method, data):
+    req = urllib.request.Request(f"{URL}/{method}",
+        data=json.dumps(data).encode(), headers={"Content-Type": "application/json"},
+        method="POST")
+    return json.loads(urllib.request.urlopen(req, timeout=20).read())
 
 async def ask_deepseek(text):
     r = await client.chat.completions.create(
@@ -37,29 +40,34 @@ async def ask_deepseek(text):
 
 async def bot_loop():
     offset = 0
+    # Test API on startup
+    try:
+        import urllib.request as _ur
+        r = _ur.urlopen(f"{URL}/getMe", timeout=10)
+        info = json.loads(r.read())
+        print(f"TG OK: @{info['result']['username']}", flush=True)
+    except Exception as e:
+        print(f"TG FAIL: {e}", flush=True)
     print("BOT LISTO", flush=True)
-    async with httpx.AsyncClient(timeout=30, trust_env=False) as c:
-        while True:
-            try:
-                r = await c.post(f"{URL}/getUpdates", json={
-                    "offset": offset, "timeout": 15
-                }, timeout=20)
-                for upd in r.json().get("result", []):
-                    offset = upd["update_id"] + 1
-                    msg = upd.get("message", {})
-                    uid = str(msg.get("from", {}).get("id", ""))
-                    text = msg.get("text", "")
-                    chat_id = msg["chat"]["id"]
-                    if uid not in ALLOWED:
-                        await send(chat_id, "No autorizado.")
-                        continue
-                    reply = await ask_deepseek(text)
-                    await send(chat_id, reply[:4000])
-            except asyncio.TimeoutError:
-                continue
-            except Exception as e:
-                print(f"ERR: {e}", flush=True)
-                await asyncio.sleep(3)
+    while True:
+        try:
+            data = tg_call("getUpdates", {"offset": offset, "timeout": 15})
+            for upd in data.get("result", []):
+                offset = upd["update_id"] + 1
+                msg = upd.get("message", {})
+                uid = str(msg.get("from", {}).get("id", ""))
+                text = msg.get("text", "")
+                chat_id = msg["chat"]["id"]
+                if uid not in ALLOWED:
+                    tg_call("sendMessage", {"chat_id": chat_id, "text": "No autorizado."})
+                    continue
+                reply = await ask_deepseek(text)
+                tg_call("sendMessage", {"chat_id": chat_id, "text": reply[:4000]})
+        except asyncio.TimeoutError:
+            continue
+        except Exception as e:
+            print(f"ERR: {e}", flush=True)
+            await asyncio.sleep(3)
 
 @app.on_event("startup")
 async def startup():
