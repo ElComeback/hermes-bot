@@ -1,15 +1,23 @@
-"""Railway Telegram Bot for Hermes — uses DeepSeek API directly."""
+"""Railway Telegram Bot — uses DeepSeek API."""
 import asyncio, os, logging, sys
 import httpx
 from openai import AsyncOpenAI
+from fastapi import FastAPI
+import uvicorn
 
 logging.basicConfig(level=logging.INFO, stream=sys.stdout, format="%(message)s")
 TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 ALLOWED = os.environ.get("TELEGRAM_ALLOWED_USERS", "").split(",")
 DEEPSEEK_KEY = os.environ["DEEPSEEK_API_KEY"]
 URL = f"https://api.telegram.org/bot{TOKEN}"
+PORT = int(os.environ.get("PORT", 8080))
 
 client = AsyncOpenAI(api_key=DEEPSEEK_KEY, base_url="https://api.deepseek.com")
+app = FastAPI()
+
+@app.get("/")
+async def root():
+    return {"status": "ok"}
 
 async def send(chat_id, text):
     async with httpx.AsyncClient(timeout=30) as c:
@@ -22,19 +30,6 @@ async def ask_deepseek(text):
         max_tokens=1000
     )
     return r.choices[0].message.content or "..."
-
-async def health_check():
-    """Proper HTTP health check for Railway."""
-    async def handler(r, w):
-        req = await r.read(1024)
-        w.write(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok")
-        await w.drain()
-        w.close()
-    server = await asyncio.start_server(
-        handler, "0.0.0.0", int(os.environ.get("PORT", 8080))
-    )
-    async with server:
-        await server.serve_forever()
 
 async def bot_loop():
     offset = 0
@@ -62,8 +57,9 @@ async def bot_loop():
                 print(f"ERR: {e}", flush=True)
                 await asyncio.sleep(3)
 
-async def main():
-    await asyncio.gather(health_check(), bot_loop())
+@app.on_event("startup")
+async def startup():
+    asyncio.create_task(bot_loop())
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    uvicorn.run(app, host="0.0.0.0", port=PORT, log_level="warning")
