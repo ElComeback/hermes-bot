@@ -1,5 +1,9 @@
 """Railway Telegram Bot — uses DeepSeek API."""
 import asyncio, os, logging, sys
+# Clear proxy env vars for Railway internal network
+for key in list(os.environ):
+    if key.upper() in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"):
+        del os.environ[key]
 import httpx
 from openai import AsyncOpenAI
 from fastapi import FastAPI
