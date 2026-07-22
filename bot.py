@@ -53,8 +53,8 @@ def clean_hermes(text):
 
 def ask_hermes(text):
     """Call full Hermes CLI with skills and tools."""
-    # Tell Hermes to respond in plain text for Telegram
-    enhanced = f"(Responde en español, en 1-3 párrafos cortos, sin markdown ni formato, texto plano.)\n\n{text}"
+    # Tell Hermes to respond in HTML for Telegram formatting
+    enhanced = f"(Responde en español, usa HTML para formato: <b>negrita</b> <i>cursiva</i> <code>código</code>. Sé conciso.)\n\n{text}"
     try:
         proc = subprocess.run(
             [_HERMES, "chat", "-q", enhanced],
@@ -97,10 +97,10 @@ async def bot_loop():
                 text = msg.get("text", "")
                 chat_id = msg["chat"]["id"]
                 if uid not in ALLOWED:
-                    tg_call("sendMessage", {"chat_id": chat_id, "text": "No autorizado."})
+                    tg_call("sendMessage", {"chat_id": chat_id, "text": "No autorizado.", "parse_mode": "HTML"})
                     continue
                 reply = await asyncio.to_thread(ask_hermes, text)
-                tg_call("sendMessage", {"chat_id": chat_id, "text": reply[:4000]})
+                tg_call("sendMessage", {"chat_id": chat_id, "text": reply[:4000], "parse_mode": "HTML"})
         except urllib.error.HTTPError as e:
             if e.code == 409:
                 print("409 - esperando...", flush=True)
