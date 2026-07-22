@@ -7,13 +7,18 @@ urllib.request.install_opener(
 
 # Setup Hermes config at startup
 def md_to_html(text):
-    """Convert simple markdown to Telegram-compatible HTML."""
+    """Convert markdown to Telegram-compatible HTML."""
     import re
+    # Code blocks (```lang\ncode\n```)
+    text = re.sub(r'```\w*\n(.+?)```', r'<pre><code>\1</code></pre>', text, flags=re.DOTALL)
+    # Bold+italic
     text = re.sub(r'\*\*\*(.+?)\*\*\*', r'<b><i>\1</i></b>', text)
+    # Bold
     text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', text)
+    # Italic
     text = re.sub(r'\*(.+?)\*', r'<i>\1</i>', text)
+    # Inline code
     text = re.sub(r'`(.+?)`', r'<code>\1</code>', text)
-    text = re.sub(r'```(.+?)```', r'<pre>\1</pre>', text, flags=re.DOTALL)
     return text
 
 _HERMES_HOME = os.path.expanduser("~/.hermes")
