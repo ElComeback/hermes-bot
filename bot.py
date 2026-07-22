@@ -1,6 +1,9 @@
 """Railway Telegram Bot — powered by Hermes Agent."""
 import asyncio, os, logging, sys, json, urllib.request, subprocess
 
+# Locate hermes CLI in the same venv
+_HERMES = os.path.join(os.path.dirname(sys.executable), "hermes")
+
 urllib.request.install_opener(
     urllib.request.build_opener(urllib.request.ProxyHandler({})))
 from fastapi import FastAPI
@@ -42,13 +45,26 @@ def clean_hermes(text):
 
 def ask_hermes(text):
     """Call full Hermes CLI with skills and tools."""
-    proc = subprocess.run(
-        ["hermes", "chat", "-q", text],
-        capture_output=True, text=True, timeout=120,
-        cwd=os.path.expanduser("~/.hermes"),
-        env={**os.environ, "TERM": "xterm-256color", "PAGER": "cat"}
-    )
-    return clean_hermes(proc.stdout) or "Sin respuesta."
+    try:
+        proc = subprocess.run(
+            [_HERMES, "chat", "-q", text],
+            capture_output=True, text=True, timeout=120,
+            cwd=os.path.expanduser("~/.hermes"),
+            env={**os.environ, "TERM": "xterm-256color", "PAGER": "cat"}
+        )
+        reply = clean_hermes(proc.stdout)
+        if not reply:
+            print(f"HERMES STDERR: {proc.stderr[:500]}", flush=True)
+        return reply or "Sin respuesta."
+    except subprocess.TimeoutExpired:
+        print("HERMES TIMEOUT", flush=True)
+        return "La respuesta tardó mucho."
+    except FileNotFoundError:
+        print(f"HERMES NOT FOUND at {_HERMES}", flush=True)
+        return "Error: Hermes no instalado."
+    except Exception as e:
+        print(f"HERMES ERR: {e}", flush=True)
+        return f"Error: {str(e)[:200]}"
 
 async def bot_loop():
     offset = 0
