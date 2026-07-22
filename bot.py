@@ -10,7 +10,7 @@ from fastapi import FastAPI
 import uvicorn
 
 logging.basicConfig(level=logging.INFO, stream=sys.stdout, format="%(message)s")
-TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
+TOKEN = os.environ["TELEGRAM_BOT_TOKEN"].strip()
 ALLOWED = os.environ.get("TELEGRAM_ALLOWED_USERS", "").split(",")
 DEEPSEEK_KEY = os.environ["DEEPSEEK_API_KEY"]
 URL = f"https://api.telegram.org/bot{TOKEN}"
