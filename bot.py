@@ -1,11 +1,19 @@
 """Railway Telegram Bot — powered by Hermes Agent."""
 import asyncio, os, logging, sys, json, urllib.request, subprocess
 
-# Locate hermes CLI in the same venv
 _HERMES = os.path.join(os.path.dirname(sys.executable), "hermes")
-
 urllib.request.install_opener(
     urllib.request.build_opener(urllib.request.ProxyHandler({})))
+
+# Setup Hermes config at startup
+_HERMES_HOME = os.path.expanduser("~/.hermes")
+os.makedirs(_HERMES_HOME, exist_ok=True)
+with open(f"{_HERMES_HOME}/config.yaml", "w") as f:
+    f.write("model:\n  default: deepseek-chat\n  provider: deepseek\n  base_url: https://api.deepseek.com\n")
+with open(f"{_HERMES_HOME}/.env", "w") as f:
+    f.write(f"DEEPSEEK_API_KEY={os.environ.get('DEEPSEEK_API_KEY', '')}\n")
+    f.write(f"TELEGRAM_BOT_TOKEN={os.environ.get('TELEGRAM_BOT_TOKEN', '')}\n")
+
 from fastapi import FastAPI
 import uvicorn
 
@@ -49,7 +57,7 @@ def ask_hermes(text):
         proc = subprocess.run(
             [_HERMES, "chat", "-q", text],
             capture_output=True, text=True, timeout=120,
-            cwd=os.path.expanduser("~/.hermes"),
+            cwd=_HERMES_HOME,
             env={**os.environ, "TERM": "xterm-256color", "PAGER": "cat"}
         )
         reply = clean_hermes(proc.stdout)
