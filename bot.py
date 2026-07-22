@@ -1,23 +1,16 @@
-"""Railway Telegram Bot — bypasses proxy for Telegram API calls."""
-import asyncio, os, logging, sys, json
+"""Railway Telegram Bot — powered by Hermes Agent."""
+import asyncio, os, logging, sys, json, urllib.request, subprocess
 
-# Force no proxy for all urllib requests (Railway injects HTTP_PROXY)
-import urllib.request
 urllib.request.install_opener(
     urllib.request.build_opener(urllib.request.ProxyHandler({})))
-from openai import AsyncOpenAI
 from fastapi import FastAPI
 import uvicorn
 
 logging.basicConfig(level=logging.INFO, stream=sys.stdout, format="%(message)s")
 TOKEN = os.environ["TELEGRAM_BOT_TOKEN"].strip()
 ALLOWED = os.environ.get("TELEGRAM_ALLOWED_USERS", "").split(",")
-DEEPSEEK_KEY = os.environ["DEEPSEEK_API_KEY"]
 URL = f"https://api.telegram.org/bot{TOKEN}"
 PORT = int(os.environ.get("PORT", 8080))
-
-client = AsyncOpenAI(api_key=DEEPSEEK_KEY, base_url="https://api.deepseek.com",
-                     http_client=__import__("httpx").AsyncClient(trust_env=False))
 app = FastAPI()
 
 @app.get("/")
@@ -30,26 +23,42 @@ def tg_call(method, data):
         method="POST")
     return json.loads(urllib.request.urlopen(req, timeout=20).read())
 
-async def ask_deepseek(text):
-    r = await client.chat.completions.create(
-        model="deepseek-chat",
-        messages=[{"role": "user", "content": text}],
-        max_tokens=1000
+def clean_hermes(text):
+    """Extract response from Hermes CLI box output."""
+    lines = text.split("\n")
+    inside, out = False, []
+    for line in lines:
+        if "╭─" in line:
+            inside = True
+            continue
+        if inside and "╰─" in line:
+            inside = False
+            continue
+        if inside:
+            c = line.strip().strip("║│ ")
+            if c:
+                out.append(c)
+    return "\n".join(out).strip() or text[:4000]
+
+def ask_hermes(text):
+    """Call full Hermes CLI with skills and tools."""
+    proc = subprocess.run(
+        ["hermes", "chat", "-q", text],
+        capture_output=True, text=True, timeout=120,
+        cwd=os.path.expanduser("~/.hermes"),
+        env={**os.environ, "TERM": "xterm-256color", "PAGER": "cat"}
     )
-    return r.choices[0].message.content or "..."
+    return clean_hermes(proc.stdout) or "Sin respuesta."
 
 async def bot_loop():
     offset = 0
-    # Test API on startup
     try:
-        import urllib.request as _ur
-        r = _ur.urlopen(f"{URL}/getMe", timeout=10)
+        r = urllib.request.urlopen(f"{URL}/getMe", timeout=10)
         info = json.loads(r.read())
         print(f"TG OK: @{info['result']['username']}", flush=True)
     except Exception as e:
         print(f"TG FAIL: {e}", flush=True)
     print("BOT LISTO", flush=True)
-    # Drop pending updates so we don't reprocess old messages
     try: tg_call("deleteWebhook", {"drop_pending_updates": True})
     except: pass
     while True:
@@ -64,11 +73,11 @@ async def bot_loop():
                 if uid not in ALLOWED:
                     tg_call("sendMessage", {"chat_id": chat_id, "text": "No autorizado."})
                     continue
-                reply = await ask_deepseek(text)
+                reply = await asyncio.to_thread(ask_hermes, text)
                 tg_call("sendMessage", {"chat_id": chat_id, "text": reply[:4000]})
         except urllib.error.HTTPError as e:
             if e.code == 409:
-                print("409 - otra instancia activa, esperando...", flush=True)
+                print("409 - esperando...", flush=True)
                 await asyncio.sleep(10)
                 continue
             print(f"ERR {e.code}: {e.reason}", flush=True)
