@@ -1,5 +1,5 @@
 """Railway Telegram Bot for Hermes — uses DeepSeek API directly."""
-import asyncio, os, re, logging, sys
+import asyncio, os, logging, sys
 import httpx
 from openai import AsyncOpenAI
 
@@ -23,7 +23,17 @@ async def ask_deepseek(text):
     )
     return r.choices[0].message.content or "..."
 
-async def main():
+async def health_check():
+    """Minimal HTTP server for Railway health checks."""
+    import asyncio
+    server = await asyncio.start_server(
+        lambda r, w: (w.write(b"HTTP/1.1 200 OK\r\n\r\nok"), w.close()),
+        "0.0.0.0", int(os.environ.get("PORT", 8080))
+    )
+    async with server:
+        await server.serve_forever()
+
+async def bot_loop():
     offset = 0
     print("BOT LISTO", flush=True)
     async with httpx.AsyncClient(timeout=30) as c:
@@ -48,6 +58,9 @@ async def main():
             except Exception as e:
                 print(f"ERR: {e}", flush=True)
                 await asyncio.sleep(3)
+
+async def main():
+    await asyncio.gather(health_check(), bot_loop())
 
 if __name__ == "__main__":
     asyncio.run(main())
