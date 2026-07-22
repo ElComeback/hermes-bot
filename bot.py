@@ -12,7 +12,7 @@ DEEPSEEK_KEY = os.environ["DEEPSEEK_API_KEY"]
 URL = f"https://api.telegram.org/bot{TOKEN}"
 PORT = int(os.environ.get("PORT", 8080))
 
-client = AsyncOpenAI(api_key=DEEPSEEK_KEY, base_url="https://api.deepseek.com")
+client = AsyncOpenAI(api_key=DEEPSEEK_KEY, base_url="https://api.deepseek.com", http_client=httpx.AsyncClient(trust_env=False))
 app = FastAPI()
 
 @app.get("/")
@@ -20,7 +20,7 @@ async def root():
     return {"status": "ok"}
 
 async def send(chat_id, text):
-    async with httpx.AsyncClient(timeout=30) as c:
+    async with httpx.AsyncClient(timeout=30, trust_env=False) as c:
         await c.post(f"{URL}/sendMessage", json={"chat_id": chat_id, "text": text})
 
 async def ask_deepseek(text):
@@ -34,7 +34,7 @@ async def ask_deepseek(text):
 async def bot_loop():
     offset = 0
     print("BOT LISTO", flush=True)
-    async with httpx.AsyncClient(timeout=30) as c:
+    async with httpx.AsyncClient(timeout=30, trust_env=False) as c:
         while True:
             try:
                 r = await c.post(f"{URL}/getUpdates", json={
