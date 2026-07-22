@@ -24,11 +24,14 @@ async def ask_deepseek(text):
     return r.choices[0].message.content or "..."
 
 async def health_check():
-    """Minimal HTTP server for Railway health checks."""
-    import asyncio
+    """Proper HTTP health check for Railway."""
+    async def handler(r, w):
+        req = await r.read(1024)
+        w.write(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok")
+        await w.drain()
+        w.close()
     server = await asyncio.start_server(
-        lambda r, w: (w.write(b"HTTP/1.1 200 OK\r\n\r\nok"), w.close()),
-        "0.0.0.0", int(os.environ.get("PORT", 8080))
+        handler, "0.0.0.0", int(os.environ.get("PORT", 8080))
     )
     async with server:
         await server.serve_forever()
