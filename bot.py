@@ -49,6 +49,9 @@ async def bot_loop():
     except Exception as e:
         print(f"TG FAIL: {e}", flush=True)
     print("BOT LISTO", flush=True)
+    # Drop pending updates so we don't reprocess old messages
+    try: tg_call("deleteWebhook", {"drop_pending_updates": True})
+    except: pass
     while True:
         try:
             data = tg_call("getUpdates", {"offset": offset, "timeout": 15})
